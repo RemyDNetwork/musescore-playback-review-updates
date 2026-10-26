@@ -1,0 +1,40 @@
+name: Publish signed reviewer update
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify release payload
+        shell: powershell
+        run: |
+          $m=Get-Content reviewer-update.json -Raw|ConvertFrom-Json
+          if('v'+$m.version -cne $env:GITHUB_REF_NAME){throw 'Tag/version mismatch'}
+          if((Get-FileHash reviewer-update.zip).Hash.ToLowerInvariant() -cne $m.sha256){throw 'Archive hash mismatch'}
+          if((Get-Item reviewer-update.zip).Length -ne $m.bytes){throw 'Archive size mismatch'}
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip=[IO.Compression.ZipFile]::OpenRead((Join-Path $pwd 'reviewer-update.zip'))
+          try {
+            if($zip.Entries.Count -ne 22 -or @($m.files).Count -ne 22){throw 'Unexpected release contents'}
+            foreach($entry in $zip.Entries){
+              $file=@($m.files|Where-Object path -CEQ $entry.FullName)
+              if($file.Count -ne 1 -or $entry.Length -ne $file[0].bytes){throw 'Unexpected file'}
+              if($entry.FullName -notmatch '^(App/[^/]+|QUICK START.txt)$' -or $entry.FullName -match '(?i)sync.json|reviewer.json|private|\.env'){throw 'Protected file'}
+              $s=$entry.Open();$h=[Security.Cryptography.SHA256]::Create()
+              try {$digest=([BitConverter]::ToString($h.ComputeHash($s))).Replace('-','').ToLowerInvariant()}finally{$h.Dispose();$s.Dispose()}
+              if($digest -cne $file[0].sha256){throw 'File hash mismatch'}
+            }
+          }finally{$zip.Dispose()}
+      - name: Publish verified application files
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME reviewer-update.json reviewer-update.sig reviewer-update.zip --draft --title "Playback reviewer $env:GITHUB_REF_NAME" --notes "Signed application-only update. Shared sync is near the top; short windows scroll. Books, reviews and connection settings are preserved."
+          if($LASTEXITCODE -ne 0){throw 'Draft creation failed'}
+          gh release edit $env:GITHUB_REF_NAME --draft=false --latest
+          if($LASTEXITCODE -ne 0){throw 'Publication failed'}
