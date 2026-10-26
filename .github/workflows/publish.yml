@@ -12,6 +12,13 @@ jobs:
       - name: Verify release payload
         shell: powershell
         run: |
+          $rsa=New-Object Security.Cryptography.RSACryptoServiceProvider
+          $rsa.PersistKeyInCsp=$false
+          try {
+            $rsa.FromXmlString([IO.File]::ReadAllText((Join-Path $pwd 'update-public-key.xml')))
+            $signature=[Convert]::FromBase64String([IO.File]::ReadAllText((Join-Path $pwd 'reviewer-update.sig')).Trim())
+            if(-not $rsa.VerifyData([IO.File]::ReadAllBytes((Join-Path $pwd 'reviewer-update.json')),'SHA256',$signature)){throw 'Invalid release signature'}
+          }finally{$rsa.Dispose()}
           $m=Get-Content reviewer-update.json -Raw|ConvertFrom-Json
           if('v'+$m.version -cne $env:GITHUB_REF_NAME){throw 'Tag/version mismatch'}
           if((Get-FileHash reviewer-update.zip).Hash.ToLowerInvariant() -cne $m.sha256){throw 'Archive hash mismatch'}
