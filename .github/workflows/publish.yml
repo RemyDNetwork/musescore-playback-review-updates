@@ -41,7 +41,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create $env:GITHUB_REF_NAME reviewer-update.json reviewer-update.sig reviewer-update.zip --draft --title "Playback reviewer $env:GITHUB_REF_NAME" --notes "Signed application-only update. Current-song review status and bulk fermata duration controls. Books, reviews and connection settings are preserved."
+          gh release create $env:GITHUB_REF_NAME reviewer-update.json reviewer-update.sig reviewer-update.zip --draft --title "Playback reviewer $env:GITHUB_REF_NAME" --notes "Signed application-only update. v0.12.2 startup repair requires the new full kit or replacement root UpdateReview.ps1; application updates do not replace the bootstrap. Books, reviews and connection settings are preserved."
           if($LASTEXITCODE -ne 0){throw 'Draft creation failed'}
           gh release edit $env:GITHUB_REF_NAME --draft=false --latest
           if($LASTEXITCODE -ne 0){throw 'Publication failed'}
